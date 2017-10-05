@@ -378,7 +378,6 @@ DialogInterface.OnDismissListener, PopupMenu.OnDismissListener{
 
         fillCategories();
         loadMainPanel();
-        extractXMPData();
         processIntent();
     }
 
@@ -1863,6 +1862,8 @@ DialogInterface.OnDismissListener, PopupMenu.OnDismissListener{
                     Toast.makeText(FilterShowActivity.this,
                             R.string.cannot_edit_original, Toast.LENGTH_SHORT).show();
                     startLoadBitmap(mOriginalImageUri);
+                } else if (mOriginalImageUri == null) {
+                    extractXMPData(true);
                 } else {
                     cannotLoadImage();
                 }
@@ -1917,9 +1918,42 @@ DialogInterface.OnDismissListener, PopupMenu.OnDismissListener{
             mHiResBitmapTask = new LoadHighresBitmapTask();
             mHiResBitmapTask.execute();
             MasterImage.getImage().warnListeners();
+            extractXMPData(false);
             super.onPostExecute(result);
         }
 
+    }
+
+    private class extractXMPDataTask extends AsyncTask<Void, Void, XMresults> {
+        private boolean needFinish = false;
+
+        public extractXMPDataTask(boolean needFinish) {
+            this.needFinish = needFinish;
+        }
+
+        protected XMresults doInBackground(Void... params) {
+            return XmpPresets.extractXMPData(
+                    getBaseContext(), mMasterImage, getIntent().getData());
+        }
+
+        protected void onPostExecute(XMresults xMresults) {
+            super.onPostExecute(xMresults);
+            if (isCancelled()) {
+                return;
+            }
+            if (xMresults == null) {
+                if (needFinish) {
+                    cannotLoadImage();
+                }
+                return;
+            }
+            if (xMresults.originalimage != null
+                    && !xMresults.originalimage.equals(mSelectedImageUri)) {
+                mOriginalImageUri = xMresults.originalimage;
+                mOriginalPreset = xMresults.preset;
+                startLoadBitmap(mOriginalImageUri);
+            }
+        }
     }
 
     private void clearGalleryBitmapPool() {
@@ -2637,14 +2671,8 @@ DialogInterface.OnDismissListener, PopupMenu.OnDismissListener{
         finish();
     }
 
-    private void extractXMPData() {
-        XMresults res = XmpPresets.extractXMPData(
-                getBaseContext(), mMasterImage, getIntent().getData());
-        if (res == null)
-            return;
-
-        mOriginalImageUri = res.originalimage;
-        mOriginalPreset = res.preset;
+    private void extractXMPData(boolean needFinish) {
+        new extractXMPDataTask(needFinish).execute();
     }
 
     public Uri getSelectedImageUri() {
